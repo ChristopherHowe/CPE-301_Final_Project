@@ -16,7 +16,7 @@ void setup() {
 
   Serial.begin(9600);
   lcd.begin(16,2);
-    lcd.clear();
+  lcd.clear();
   lcd.setCursor(0,0);
   lcd.print('h');
 
