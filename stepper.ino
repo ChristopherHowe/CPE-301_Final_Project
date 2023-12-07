@@ -29,15 +29,20 @@ void setup()
 void loop() 
 {
   int val = adc_read(0);
-
+  Serial.println(val);
   if(val!=pot_value){
+    Serial.println("Hello");
     if(val>pot_value){
       int temp = val -pot_value;
-      myStepper.step(temp)
+      Serial.println(temp);
+      myStepper.step(temp);
+      pot_value = val;
     }
     else{
       int temp = pot_value - val;
-      myStepper.step(-temp)
+      Serial.println(temp);
+      myStepper.step(-temp);
+      pot_value = val;
     }
   }
 }
