@@ -26,21 +26,20 @@ void setup()
   // setup the ADC
   adc_init();
 }
+
 void loop() 
 {
   int val = adc_read(0);
-  Serial.println(val);
   if(val!=pot_value){
-    Serial.println("Hello");
     if(val>pot_value){
       int temp = val -pot_value;
-      Serial.println(temp);
+      myStepper.setSpeed(10);
       myStepper.step(temp);
       pot_value = val;
     }
     else{
       int temp = pot_value - val;
-      Serial.println(temp);
+      myStepper.setSpeed(10);
       myStepper.step(-temp);
       pot_value = val;
     }
