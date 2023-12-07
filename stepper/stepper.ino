@@ -30,7 +30,10 @@ void setup()
 void loop() 
 {
   int val = adc_read(0);
+  Serial.print("pot val:");
+  Serial.print(val);
   if(val!=pot_value){
+    Serial.print("The pot has changed\n");
     if(val>pot_value){
       int temp = val -pot_value;
       myStepper.setSpeed(10);
