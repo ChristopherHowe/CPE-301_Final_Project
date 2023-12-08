@@ -2,6 +2,8 @@
  * Chris Howe and Neil Babu
  */
 
+
+// All three pins should be digital, speed pin outputs a square wave using PWM
  int speedPin=32;
  int dir1=30;
  int dir2=31;
@@ -19,8 +21,8 @@
   //put your main code here, to run repeatedly:
   digitalWrite(dir1, LOW);
   digitalWrite(dir2, HIGH);
-  analogWrite(speedPin,255);
-  delay(24);
+  analogWrite(speedPin,255); // Should be using a digital pin, analog write is used to implment PWM.
+  delay(1000);
   analogWrite(speedPin,mSpeed);
-  delay(5000);
+  delay(1000);
  }
