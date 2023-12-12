@@ -1,10 +1,16 @@
 #include <TimeLib.h>
 #include <Stepper.h>
+#include <dht.h>
 
+
+#define DHTPIN 22
 
 
 #define RDA 0x80
-#define TBE 0x20  
+#define TBE 0x20
+
+#define UDRE0 5
+#define RXC0 7
 
 volatile unsigned char *myUCSR0A = (unsigned char *)0x00C0;
 volatile unsigned char *myUCSR0B = (unsigned char *)0x00C1;
@@ -17,16 +23,62 @@ volatile unsigned char* my_ADCSRB = (unsigned char*) 0x7B;
 volatile unsigned char* my_ADCSRA = (unsigned char*) 0x7A;
 volatile unsigned int* my_ADC_DATA = (unsigned int*) 0x78;
 
+// Define Port L Register Pointers - used to control the LEDs
+volatile unsigned char* port_l = (unsigned char*) 0x10B; 
+volatile unsigned char* ddr_l  = (unsigned char*) 0x10A; 
+volatile unsigned char* pin_l  = (unsigned char*) 0x109; 
 
- 
-#define UDRE0 5
-#define RXC0 7
+// Define Port E Register Pointers - used to control the interrupt buttons
+volatile unsigned char* port_e = (unsigned char*) 0x2E; 
+volatile unsigned char* ddr_e  = (unsigned char*) 0x2D; 
+volatile unsigned char* pin_e  = (unsigned char*) 0x2C; 
+
+
+
+
+  else {
+    write_pl(disabledLED,0);
+    write_pl(errorLED,0);
+  }
+  if (on) {
+    write_pl(idleLED,1);
+    write_pl(runningLED,1);
+  }
+  else {
+    write_pl(idleLED,0);
+    write_pl(runningLED,0);
+  }
+}
+
+
+// Used to configure interrupts.
+int resetPin = 3; // farthest from lights
+int powerPin = 2; // near the lights
+//Note: these vars are only for reference
+int disabledLEDPin = 49; // Yellow
+int errorLEDPin = 47; // Red
+int idleLEDPin = 45; // Green
+int runningLEDPin = 43; //Blue
+
+
+int reset = 5; // farthest from lights
+int power = 4; // near the lights
+int disabledLED = 0; // Yellow
+int errorLED = 2; // Red
+int idleLED = 4; // Green
+int runningLED = 6; //Blue
+
+bool on = false;
+bool idle = false;
+bool triggered = false;
  
 char state = 'D';
 
 int pot_value=0;
 
 const int stepsPerRevolution = 2046;
+
+dht DHT;
 
 Stepper myStepper = Stepper(stepsPerRevolution, 8, 10, 9, 11);
 
@@ -35,11 +87,16 @@ unsigned int numbers[10]= {0,1,2,3,4,5,6,7,8,9};
 
 unsigned char characters[10]= {'0','1','2','3','4','5','6','7','8','9'};
 
-
-
-
 void setup() {
-
+    //set PB7 to OUTPUT
+  set_PL_as_output(disabledLED);
+  set_PL_as_output(errorLED);
+  set_PL_as_output(idleLED);
+  set_PL_as_output(runningLED);
+  set_PE_as_pullup_input(reset);
+  set_PE_as_pullup_input(power);
+  attachInterrupt(digitalPinToInterrupt(resetPin), handleReset, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(powerPin), handlePower, CHANGE);
   U0init(9600);
   setTime(16, 58, 20, 11, 12, 2023);
   adc_init();
@@ -66,15 +123,41 @@ void loop() {
 }
 
 void d_state(){
-  // Fan off yellow light on
-  // should be able to adjust vent
+  stepper_motor();
+  write_pl(disabledLED,1);
+  write_pl(errorLEDPin,0);
+  write_pl(idleLEDPin,0);
+  write_pl(runningLEDPin,0);
+  // Fan off 
+  // yes yellow light on
+  // yes should be able to adjust vent
 }
 void i_state(){
-  // Fan off green led on
+
+  
+  write_pl(disabledLED,0);
+  write_pl(errorLEDPin,0);
+  write_pl(idleLEDPin,1);
+  write_pl(runningLEDPin,0);
+
+  stepper_motor();
+
+  int chk = DHT.read11(DHTPIN);
+  lcd.setCursor(0,0); 
+  lcd.print("Temp: ");
+  lcd.print(DHT.temperature);
+  lcd.setCursor(0,1);
+  lcd.print("Humidity: ");
+  lcd.print(DHT.humidity);
+
+  if(DHT.temperature == )
+  delay_using_milli(1000);
+  // Fan off 
+  // yes green led on
   // if temp greater than threshold go to running
-  // display temp and humidity on LCD
-  // polling temp
-  // should be able to adjust vent
+  // yes display temp and humidity on LCD
+  // yes polling temp
+  // yes should be able to adjust vent
 }
 void e_state(){
   // LCD display message red light on
@@ -88,6 +171,10 @@ void r_state(){
   // should be able to adjust vent
 }
 
+void delay_using_milli(int interval){
+  unsigned long time_now = millis();
+  while(millis() < time_now + interval){}
+}
 
 void stepper_motor(){
   int val = adc_read(0);
@@ -187,7 +274,42 @@ void U0putchar(unsigned char U0pdata) { // Serial.Write
   *myUDR0=U0pdata;
 }
 
+void set_PL_as_output(unsigned char pin_num)
+{
+    *ddr_l |= 0x01 << pin_num;
+}
+void set_PE_as_pullup_input(unsigned char pin_num)
+{
+    *ddr_e &= ~(0x01 << pin_num);
+    *port_e |= 0x01 << pin_num;
+}
 
+bool read_pe(unsigned char pin_num){
+  return *pin_e & 0x01 << pin_num;
+}
 
+void write_pl(unsigned char pin_num, unsigned char state1)
+{
+  if(state1 == 0)
+  {
+    *port_l &= ~(0x01 << pin_num);
+  }
+  else
+  {
+    *port_l |= 0x01 << pin_num;
+  }
+}
 
+void handlePower(){
+  if (read_pe(power)){
+    on = !on;
+  }
+}
+
+void handleReset(){
+  if (read_pe(reset)){
+    // set state to idle;
+    idle=true;
+  }
+}
 
