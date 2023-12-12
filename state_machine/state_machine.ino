@@ -43,18 +43,18 @@ volatile unsigned char* port_b = (unsigned char*) 0x25;
 volatile unsigned char* ddr_b  = (unsigned char*) 0x24; 
 volatile unsigned char* pin_b  = (unsigned char*) 0x23; 
 
-//Define Port C Register Pointers - used to control fan
+//Define Port C Register Pointers - used to control motor
 volatile unsigned char* port_c = (unsigned char*) 0x28; 
 volatile unsigned char* ddr_c  = (unsigned char*) 0x27; 
 volatile unsigned char* pin_c  = (unsigned char*) 0x26; 
 
-// Pin numbers for reference for fa
+// Pin numbers for reference
 int speedPin=32;
 int dir1Pin=31;
 int dir2Pin=30;
 int mSpeed=90;
 
-// Pin numbers for port c for fan
+// Pin numbers for port c
 int speedC = 5;
 int dir1C = 6;
 int dir2C = 7;
@@ -106,25 +106,16 @@ unsigned char characters[10]= {'0','1','2','3','4','5','6','7','8','9'};
 // ISRs for control interrupts //
 /////////////////////////////////
 
-
-// defines functionality for when the power button is pressed
 void handlePower(){
   if (read_pe(power)){
-    if(!disabledState) {
-      setState(disabledState);
-    }
-    else {
-      setState(idleState);
-    }
+    on = !on;
   }
 }
 
-// defines functionality for when the reset button is pressed.
 void handleReset(){
   if (read_pe(reset)){
-    if (state == errorState) {
-      setState(idleState)
-    }
+    // set state to idle;
+    idle=true;
   }
 }
 
@@ -134,6 +125,8 @@ void handleReset(){
 
 
 void setup() {
+  
+
   //set PB7 to OUTPUT
   // Setup for controls, Port L = LEDs Port E = buttons
   set_PL_as_output(disabledLED);
@@ -163,6 +156,10 @@ void setup() {
   set_PB_as_output(1);
 }
 
+
+
+
+
 // MAIN LOOP
 void loop() {
   print_time();
@@ -184,7 +181,7 @@ void loop() {
 // State functions, include everything that should be executed for a particular state//
 ///////////////////////////////////////////////////////////////////////////////////////
 
-void setState(enum state newState){
+void setState(state newState){
   switch (state) {
     case idleState:
       if (newState == idleState) {
@@ -209,25 +206,18 @@ void setState(enum state newState){
 
 // disabled state
 void d_state(){
-  // Adjust vent
   stepper_motor();
-  //Yellow Light on
   setLEDs(1,0,0,0);
-  // Fan off
-  turn_off_fan();
+  
+  // Fan off 
+  // yes yellow light on
+  // yes should be able to adjust vent
 }
 // idle state
 void i_state(){
   setLEDs(0,0,1,0);
-  // Green Light On,0);
-  
-  
-  //Adjust ventstepper_motor();
+  stepper_motor();
 
-
-  
-  turn_off_fan();
-  
   int chk = DHT.read11(DHTPIN);
   lcd.setCursor(0,0); 
   lcd.print("Temp: ");
@@ -236,30 +226,26 @@ void i_state(){
   lcd.print("Humidity: ");
   lcd.print(DHT.humidity);
 
-  // if temp greater than threshold go to running
   if(DHT.temperature > TEMP_THRESHOLD){
-    setState(runningState);
+    
   }
   delay_using_milli(1000);
   // Fan off 
   // yes green led on
-  
+  // if temp greater than threshold go to running
   // yes display temp and humidity on LCD
   // yes polling temp
   // yes should be able to adjust vent
 }
 // error state
 void e_state(){
-  setLEDs(0,1,0,0);
-  lcd.clear()
-  lcd.setCursor(0,0);
-  lcd.print("Error, the water level is too low");
+  // LCD display message red light on
+  // only this state can the reset button be pushed
 }
 // running state
 void r_state(){
-  setLEDs(0,0,0,1)
   if (waterTooLow()){
-    setState(errorState)
+    setState('E')
   }
   //blue light on, fan on
   // display temp and humidity on LCD
@@ -455,17 +441,4 @@ bool waterTooLow(){
   return false;
 }
 
-//////////////////////////
-// Helper function for fan
-//////////////////////////
 
-void turn_on_fan(){
-  write_pc(5,1);
-  write_pc(6,1);
-  write_pc(7,0);
-}
-void turn_off_fan(){
-  write_pc(5,1);
-  write_pc(6,1);
-  write_pc(7,0);
-}

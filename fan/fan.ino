@@ -36,7 +36,7 @@ int dir2C = 7;
   delay(1000);
  }
 
- void set_PC_as_output(unsigned char pin_num)
+void set_PC_as_output(unsigned char pin_num)
 {
     *ddr_c |= 0x01 << pin_num;
 }

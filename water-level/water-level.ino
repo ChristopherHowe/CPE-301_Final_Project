@@ -36,16 +36,6 @@ void loop()
   delay(200);
 }
 
-void intToCharArray(unsigned int in, char* out){
-  char chars[10] = {'0','1','2','3','4','5','6','7','8','9'};
-  int divider = 100;
-  for (int i =0; i < 3; i++){
-    out[i]= chars[in/divider];
-    in %= divider;
-    divider /= 10;
-  }
-}
-
 void adc_init(){
   // setup the A register
   *my_ADCSRA |= 0b10000000; // set bit   7 to 1 to enable the ADC
