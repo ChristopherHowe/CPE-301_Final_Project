@@ -71,8 +71,15 @@ int runningLED = 6; //Blue
 bool on = false;
 bool idle = false;
 bool triggered = false;
- 
+
+
+
+//////////////////
+/****************/
 char state = 'D';
+/****************/
+//////////////////
+
 
 int pot_value=0;
 
@@ -88,7 +95,8 @@ unsigned int numbers[10]= {0,1,2,3,4,5,6,7,8,9};
 unsigned char characters[10]= {'0','1','2','3','4','5','6','7','8','9'};
 
 void setup() {
-    //set PB7 to OUTPUT
+  //set PB7 to OUTPUT
+  // Setup for controls, Port L = LEDs Port E = buttons
   set_PL_as_output(disabledLED);
   set_PL_as_output(errorLED);
   set_PL_as_output(idleLED);
@@ -97,31 +105,36 @@ void setup() {
   set_PE_as_pullup_input(power);
   attachInterrupt(digitalPinToInterrupt(resetPin), handleReset, CHANGE);
   attachInterrupt(digitalPinToInterrupt(powerPin), handlePower, CHANGE);
+
+  // Serial Monitor Setup
   U0init(9600);
   setTime(16, 58, 20, 11, 12, 2023);
   adc_init();
+
+
 }
 
+// MAIN LOOP
 void loop() {
-
+  print_time();
   if (state == 'D'){
-    print_time();
     d_state();
   }
   else if (state == 'I'){
-    print_time();
     i_state();
   }
   else if (state == 'E'){
-    print_time();
     e_state();
   }
   else if (state == 'R'){
-    print_time();
     r_state();
   }
 }
 
+///////////////////////////////////////////////////////////////////////////////////////
+// State functions, include everything that should be executed for a particular state//
+///////////////////////////////////////////////////////////////////////////////////////
+// disabled state
 void d_state(){
   stepper_motor();
   write_pl(disabledLED,1);
@@ -132,9 +145,8 @@ void d_state(){
   // yes yellow light on
   // yes should be able to adjust vent
 }
+// idle state
 void i_state(){
-
-  
   write_pl(disabledLED,0);
   write_pl(errorLEDPin,0);
   write_pl(idleLEDPin,1);
@@ -159,10 +171,12 @@ void i_state(){
   // yes polling temp
   // yes should be able to adjust vent
 }
+// error state
 void e_state(){
   // LCD display message red light on
   // only this state can the reset button be pushed
 }
+// running state
 void r_state(){
   //blue light on, fan on
   // display temp and humidity on LCD
@@ -171,10 +185,12 @@ void r_state(){
   // should be able to adjust vent
 }
 
+// Delay function for various uses
 void delay_using_milli(int interval){
   unsigned long time_now = millis();
   while(millis() < time_now + interval){}
 }
+
 
 void stepper_motor(){
   int val = adc_read(0);
@@ -195,6 +211,13 @@ void stepper_motor(){
     }
   }
 }
+
+
+/////////////////////////
+// Helper funcs for ADC//
+/////////////////////////
+
+
 void adc_init(){
   // setup the A register
   *my_ADCSRA |= 0b10000000; // set bit   7 to 1 to enable the ADC
@@ -227,6 +250,10 @@ unsigned int adc_read(unsigned char adc_channel_num){
   return *my_ADC_DATA;   // return the result in the ADC data register
 }
 
+///////////////////////////
+// Time Helper Functions //
+///////////////////////////
+
 void print_time(){
   print_to_monitor(hour());
   U0putchar(':');
@@ -235,6 +262,8 @@ void print_time(){
   print_to_monitor(second());
   U0putchar('\n');
 }
+
+
 void print_to_monitor(int time){
   int first = time/10;
   int second = time%10;
@@ -243,6 +272,7 @@ void print_to_monitor(int time){
   U0putchar(char1);
   U0putchar(char2);
 }
+
 char intToChar(int num){
   for(int i=0; i < 10; i++)
       {
@@ -252,6 +282,11 @@ char intToChar(int num){
         }
       }
 }
+
+/////////////////////////////////////////
+// Helper funcs for UART Communication //
+/////////////////////////////////////////
+
 void U0init(unsigned long U0baud){ // Serial.Begin
  unsigned long FCPU = 16000000;
  unsigned int tbaud;
@@ -273,6 +308,11 @@ void U0putchar(unsigned char U0pdata) { // Serial.Write
   while (!(*myUCSR0A & TBE));
   *myUDR0=U0pdata;
 }
+
+///////////////////////////////////////
+// Helper functions for control bits //
+///////////////////////////////////////
+
 
 void set_PL_as_output(unsigned char pin_num)
 {
