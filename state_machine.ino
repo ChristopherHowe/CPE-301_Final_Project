@@ -207,65 +207,83 @@ void setState(enum state newState){
   }
 }
 
-// disabled state
+/******************/
+// disabled state //
+/******************/
+
 void d_state(){
+  // the fan should be off in the disabled state
+  turn_off_fan();
+  // set the leds to indicate disabled
+  setLEDs(1,0,0,0);
+  // temp and humidity to lcd
+  int chk = DHT.read11(DHT1_PIN);
+  displayTempHumidLCD(DHT.Tempurature, DHT.Humidity)
+
+  delay_using_milli(1000);
+  
   // Adjust vent
   stepper_motor();
-  //Yellow Light on
-  setLEDs(1,0,0,0);
-  // Fan off
-  turn_off_fan();
-}
-// idle state
-void i_state(){
-  setLEDs(0,0,1,0);
-  // Green Light On,0);
-  
-  
-  //Adjust ventstepper_motor();
 
-
-  
-  turn_off_fan();
-  
-  int chk = DHT.read11(DHTPIN);
-  lcd.setCursor(0,0); 
-  lcd.print("Temp: ");
-  lcd.print(DHT.temperature);
-  lcd.setCursor(0,1);
-  lcd.print("Humidity: ");
-  lcd.print(DHT.humidity);
-
-  // if temp greater than threshold go to running
-  if(DHT.temperature > TEMP_THRESHOLD){
-    setState(runningState);
-  }
-  delay_using_milli(1000);
-  // Fan off 
-  // yes green led on
-  
-  // yes display temp and humidity on LCD
-  // yes polling temp
   // yes should be able to adjust vent
 }
-// error state
+
+/***************/
+// error state //
+/***************/
+
 void e_state(){
   setLEDs(0,1,0,0);
   lcd.clear()
   lcd.setCursor(0,0);
   lcd.print("Error, the water level is too low");
+  // No stepper allowed
+  // can only change state when reset is pressed (handled by interrupt)
 }
-// running state
+
+/*****************/
+// running state //
+/*****************/
+
 void r_state(){
+  turn_on_fan()
+  // set the LEDs to show running
   setLEDs(0,0,0,1)
+  // temp and humidity to lcd
+  int chk = DHT.read11(DHT1_PIN);
+  displayTempHumidLCD(DHT.Tempurature, DHT.Humidity)
+  // test if the water is too low
   if (waterTooLow()){
     setState(errorState)
   }
-  //blue light on, fan on
-  // display temp and humidity on LCD
-  // if temp less than threshold go to idle
-  // polling temp
-  // should be able to adjust vent
+  // make sure the temp is right
+  if (DHT.Tempurature < TEMP_THRESHOLD){
+    setState(idleState)
+  }
+  // run the angled stepper
+  stepper_motor()
+}
+
+/**************/
+// idle state //
+/**************/
+
+void i_state(){
+  // Turning on the fan
+  turn_off_fan()
+  // temp and humidity to lcd
+  int chk = DHT.read11(DHT1_PIN);
+  displayTempHumidLCD(DHT.Tempurature, DHT.Humidity)
+  // Check for water level
+  if (waterTooLow()){
+    setState(errorState)
+  }
+  // make sure the temp is right
+  if (DHT.Tempurature > TEMP_THRESHOLD){
+    setState(runningState)
+  }
+  // run the angled stepper
+  stepper_motor()
 }
 
 // Delay function for various uses
@@ -469,3 +487,19 @@ void turn_off_fan(){
   write_pc(6,1);
   write_pc(7,0);
 }
+
+//////////////////////////////////
+// Helper funcs for tempurature //
+//////////////////////////////////
+
+
+void displayTempHumidLCD(float temp, float humidity){
+  lcd.setCursor(0,0); 
+  lcd.print("Temp: ");
+  lcd.print(temp);
+  lcd.setCursor(0,1);
+  lcd.print("Humidity: ");
+  lcd.print(humidity);
+}
+
+
