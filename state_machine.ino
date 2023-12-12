@@ -37,6 +37,7 @@ unsigned char characters[10]= {'0','1','2','3','4','5','6','7','8','9'};
 
 
 
+
 void setup() {
 
   U0init(9600);
@@ -65,17 +66,29 @@ void loop() {
 }
 
 void d_state(){
-
+  // Fan off yellow light on
+  // should be able to adjust vent
 }
 void i_state(){
-
+  // Fan off green led on
+  // if temp greater than threshold go to running
+  // display temp and humidity on LCD
+  // polling temp
+  // should be able to adjust vent
 }
 void e_state(){
-
+  // LCD display message red light on
+  // only this state can the reset button be pushed
 }
 void r_state(){
-
+  //blue light on, fan on
+  // display temp and humidity on LCD
+  // if temp less than threshold go to idle
+  // polling temp
+  // should be able to adjust vent
 }
+
+
 void stepper_motor(){
   int val = adc_read(0);
   if(val!=pot_value){
