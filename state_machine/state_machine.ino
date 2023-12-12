@@ -1,9 +1,10 @@
 #include <TimeLib.h>
 #include <Stepper.h>
+#include <LiquidCrystal.h>
 #include <dht.h>
 
 
-#define DHTPIN 22
+#define DHT1_PIN 22
 
 
 #define RDA 0x80
@@ -14,6 +15,8 @@
 
 #define WATER_THRESHOLD 100
 #define TEMP_THRESHOLD 24
+#define LCD_INTERVAL 60000
+
 
 // Define UART registers - serial monitor communication
 volatile unsigned char *myUCSR0A = (unsigned char *)0x00C0;
@@ -43,23 +46,27 @@ volatile unsigned char* port_b = (unsigned char*) 0x25;
 volatile unsigned char* ddr_b  = (unsigned char*) 0x24; 
 volatile unsigned char* pin_b  = (unsigned char*) 0x23; 
 
-//Define Port C Register Pointers - used to control motor
+//Define Port C Register Pointers - used to control fan
 volatile unsigned char* port_c = (unsigned char*) 0x28; 
 volatile unsigned char* ddr_c  = (unsigned char*) 0x27; 
 volatile unsigned char* pin_c  = (unsigned char*) 0x26; 
 
-// Pin numbers for reference
+// Pin numbers for reference for fa
 int speedPin=32;
 int dir1Pin=31;
 int dir2Pin=30;
 int mSpeed=90;
 
-// Pin numbers for port c
+// Pin numbers for port c for fan
 int speedC = 5;
 int dir1C = 6;
 int dir2C = 7;
 
-////////////////////m 49; // Yellow
+// Used to configure interrupts.
+int resetPin = 3; // farthest from lights
+int powerPin = 2; // near the lights
+//Note: these vars are only for reference
+int disabledLEDPin = 49; // Yellow
 int errorLEDPin = 47; // Red
 int idleLEDPin = 45; // Green
 int runningLEDPin = 43; //Blue
@@ -83,39 +90,57 @@ enum state {
   disabledState,
 };
 
-enum state state;
-state=disabledState;
+enum state currentState = disabledState;
 /*****************/
 ///////////////////
 
 
+//////////////////////
+// Global Variables //
+//////////////////////
+
+
+// Stepper motor globs
+const int stepsPerRevolution = 2046;
+Stepper myStepper = Stepper(stepsPerRevolution, 8, 10, 9, 11);
 int pot_value=0;
 
-const int stepsPerRevolution = 2046;
-
+// temp globs
 dht DHT;
 
-Stepper myStepper = Stepper(stepsPerRevolution, 8, 10, 9, 11);
-
-
+// clock globs
 unsigned int numbers[10]= {0,1,2,3,4,5,6,7,8,9};
-
 unsigned char characters[10]= {'0','1','2','3','4','5','6','7','8','9'};
+
+// lcd globs
+unsigned long previousMillis = millis();
+const int RS = 13, EN = 12, D4 = 7, D5 = 6, D6 = 5, D7 = 4;
+LiquidCrystal lcd(RS, EN, D4, D5, D6, D7); // Creates a new lcd object
+
 
 /////////////////////////////////
 // ISRs for control interrupts //
 /////////////////////////////////
 
+
+// defines functionality for when the power button is pressed
 void handlePower(){
   if (read_pe(power)){
-    on = !on;
+    if(!disabledState) {
+      setState(disabledState);
+    }
+    else {
+      setState(idleState);
+    }
   }
 }
 
+// defines functionality for when the reset button is pressed.
 void handleReset(){
   if (read_pe(reset)){
-    // set state to idle;
-    idle=true;
+    if (currentState == errorState) {
+      setState(idleState);
+    }
   }
 }
 
@@ -125,8 +150,6 @@ void handleReset(){
 
 
 void setup() {
-  
-
   //set PB7 to OUTPUT
   // Setup for controls, Port L = LEDs Port E = buttons
   set_PL_as_output(disabledLED);
@@ -139,9 +162,9 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(powerPin), handlePower, CHANGE);
   
   // Motor Setup
-  set_PC_as_output(5);
-  set_PC_as_output(6);
-  set_PC_as_output(7);
+  set_PC_as_output(speedC);
+  set_PC_as_output(dir1C);
+  set_PC_as_output(dir2C);
 
   // Serial Monitor Setup
   U0init(9600);
@@ -156,110 +179,116 @@ void setup() {
   set_PB_as_output(1);
 }
 
-
-
-
-
 // MAIN LOOP
 void loop() {
   print_time();
-  if (state == disabledState){
+  if (currentState == disabledState){
     d_state();
   }
-  else if (state == idleState){
+  else if (currentState == idleState){
     i_state();
   }
-  else if (state == errorState){
+  else if (currentState == errorState){
     e_state();
   }
-  else if (state == runningState){
+  else if (currentState == runningState){
     r_state();
   }
+
+  delay_lcd(LCD_INTERVAL, currentState);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
 // State functions, include everything that should be executed for a particular state//
 ///////////////////////////////////////////////////////////////////////////////////////
 
-void setState(state newState){
-  switch (state) {
-    case idleState:
+void setState(enum state newState){
+  switch (currentState) {
+    case disabledState:
       if (newState == idleState) {
-        state = newState
+        currentState = newState;
       }
       break;
     case errorState:
       if (newState == idleState || newState == disabledState){
-        state = newState
+        currentState = newState;
       }
       break;
     case runningState:
-      state = newState
+      currentState = newState;
       break;
     case idleState:
-      state = newState
+      currentState = newState;
       break;
-    default:
-      throw error("Invalid state transition")
   }
 }
 
-// disabled state
+/******************/
+// disabled state //
+/******************/
+
 void d_state(){
-  stepper_motor();
+  // the fan should be off in the disabled state
+  turn_off_fan();
+  // set the leds to indicate disabled
   setLEDs(1,0,0,0);
-  
-  // Fan off 
-  // yes yellow light on
-  // yes should be able to adjust vent
-}
-// idle state
-void i_state(){
-  setLEDs(0,0,1,0);
+  // Adjust vent
   stepper_motor();
 
-  int chk = DHT.read11(DHTPIN);
-  lcd.setCursor(0,0); 
-  lcd.print("Temp: ");
-  lcd.print(DHT.temperature);
-  lcd.setCursor(0,1);
-  lcd.print("Humidity: ");
-  lcd.print(DHT.humidity);
-
-  if(DHT.temperature > TEMP_THRESHOLD){
-    
-  }
-  delay_using_milli(1000);
-  // Fan off 
-  // yes green led on
-  // if temp greater than threshold go to running
-  // yes display temp and humidity on LCD
-  // yes polling temp
   // yes should be able to adjust vent
 }
-// error state
+
+/***************/
+// error state //
+/***************/
+
 void e_state(){
-  // LCD display message red light on
-  // only this state can the reset button be pushed
+  setLEDs(0,1,0,0);
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Error, the water level is too low");
+  // No stepper allowed
+  // can only change state when reset is pressed (handled by interrupt)
 }
-// running state
+
+/*****************/
+// running state //
+/*****************/
+
 void r_state(){
+  turn_on_fan();
+  // set the LEDs to show running
+  setLEDs(0,0,0,1);
+  // test if the water is too low
   if (waterTooLow()){
-    setState('E')
+    setState(errorState);
   }
-  //blue light on, fan on
-  // display temp and humidity on LCD
-  // if temp less than threshold go to idle
-  // polling temp
-  // should be able to adjust vent
+  // make sure the temp is right
+  if (DHT.temperature < TEMP_THRESHOLD){
+    setState(idleState);
+  }
+  // run the angled stepper
+  stepper_motor();
 }
 
-// Delay function for various uses
-void delay_using_milli(int interval){
-  unsigned long time_now = millis();
-  while(millis() < time_now + interval){}
-}
+/**************/
+// idle state //
+/**************/
 
+void i_state(){
+  // Turning on the fan
+  turn_off_fan();
+  // Check for water level
+  if (waterTooLow()){
+    setState(errorState);
+  }
+  // make sure the temp is right
+  if (DHT.temperature > TEMP_THRESHOLD){
+    setState(runningState);
+  }
+  // run the angled stepper
+  stepper_motor();
+}
 
 void stepper_motor(){
   int val = adc_read(0);
@@ -381,10 +410,10 @@ void U0putchar(unsigned char U0pdata) { // Serial.Write
 // Helper functions for control bits //
 ///////////////////////////////////////
 void setLEDs(int disabled, int error, int idle, int running){
-  write_pl(disabledLED,a);
-  write_pl(errorLEDPin,b);
-  write_pl(idleLEDPin,c);
-  write_pl(runningLEDPin,d);
+  write_pl(disabledLED,disabled);
+  write_pl(errorLEDPin,error);
+  write_pl(idleLEDPin,idle);
+  write_pl(runningLEDPin,running);
 }
 
 void set_PL_as_output(unsigned char pin_num)
@@ -439,6 +468,65 @@ bool waterTooLow(){
     return true;
   }
   return false;
+}
+
+//////////////////////////
+// Helper function for fan
+//////////////////////////
+
+void turn_on_fan(){
+  write_pc(5,1);
+  write_pc(6,1);
+  write_pc(7,0);
+}
+void turn_off_fan(){
+  write_pc(5,1);
+  write_pc(6,1);
+  write_pc(7,0);
+}
+
+void set_PC_as_output(unsigned char pin_num)
+{
+    *ddr_c |= 0x01 << pin_num;
+}
+
+void write_pc(unsigned char pin_num, unsigned char state)
+{
+  if(state == 0)
+  {
+    *port_c &= ~(0x01 << pin_num);
+  }
+  else
+  {
+    *port_c |= 0x01 << pin_num;
+  }
+}
+
+//////////////////////////////////
+// Helper funcs for tempurature //
+//////////////////////////////////
+
+
+void displayTempHumidLCD(float temp, float humidity){
+  lcd.setCursor(0,0); 
+  lcd.print("Temp: ");
+  lcd.print(temp);
+  lcd.setCursor(0,1);
+  lcd.print("Humidity: ");
+  lcd.print(humidity);
+}
+
+
+
+void delay_lcd(int interval, char state){
+  unsigned long currentMillis = millis();
+  if (state != errorState){
+    if (currentMillis - previousMillis >= interval) {
+      int chk = DHT.read11(DHT1_PIN);
+      previousMillis = currentMillis; // previousMillis = last time LCD was updated.
+      displayTempHumidLCD(DHT.temperature, DHT.humidity);
+    }
+  }
 }
 
 
